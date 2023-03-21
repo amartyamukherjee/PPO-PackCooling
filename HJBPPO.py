@@ -142,7 +142,21 @@ class ActorCritic(nn.Module):
 
 
 class PPO:
-    def __init__(self, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std_init=0.6):
+    def __init__(self,
+                 state_dim,
+                 action_dim,
+                 has_continuous_action_space,
+                 lr_actor=3e-4,
+                 lr_critic=3e-4,
+                 gamma=0.99,
+                 K_epochs=10,
+                 eps_clip=0.2,
+                 action_std_init=0.6,
+                 prob_optimal_control=0.5,
+                 dx=0.01,
+                 dt=0.1,
+                 R=0.01,
+                 D=0.02):
 
         self.has_continuous_action_space = has_continuous_action_space
 
@@ -152,6 +166,11 @@ class PPO:
         self.gamma = gamma
         self.eps_clip = eps_clip
         self.K_epochs = K_epochs
+        self.prob_optimal_control = prob_optimal_control
+        self.dx = dx
+        self.dt = dt
+        self.R = R
+        self.D = D
         
         self.buffer = RolloutBuffer()
 
@@ -165,28 +184,37 @@ class PPO:
         self.policy_old.load_state_dict(self.policy.state_dict())
         
         self.MseLoss = nn.MSELoss()
-    
-    def state_derivatives(self, states):
-        u = states[:,:,0]
-        w = states[:,:,1]
 
+    def u_xx(self,u):
         u_l = torch.roll(u,1,1)
         u_r = torch.roll(u,-1,1)
 
-        u_x_l = (u-u_l)/self.dx
-        u_x_l[:,0] = 0
-        u_x_r = (u_r-u)/self.dx
-        u_x_r[:,-1] = 0
-        u_xx = (u_x_r-u_x_l)/self.dx
+        u_l[:,0] = u_l[:,2]
+        u_r[:,-1] = u_r[:,-3]
 
-        h_u = torch.exp(0.1*u)
+        u_xx = (u_r - 2*u + u_l)/(self.dx**2)
+        return u_xx
 
+    def w_x(self,w):
         w_l = torch.roll(w,1,1)
         w_r = torch.roll(w,-1,1)
         w_l[:,0] = 0
 
         w_x = (w_r-w_l)/(2*self.dx)
         w_x[:,-1] = 0
+        return w_x
+    
+    def h(self,u):
+        return torch.exp(0.1*u)
+        
+    def state_derivatives(self, states):
+        Nx = u.shape[1]
+        u = states[:,:Nx/2]
+        w = states[:,Nx/2:]
+
+        u_xx = self.u_xx(u)
+        w_x = self.w_x(w)
+        h_u = self.h(u)
 
         difference = (u-w)/self.R
 
@@ -195,9 +223,9 @@ class PPO:
         diff_1 = torch.zeros_like(states)
         diff_2 = torch.zeros_like(states)
 
-        diff_1[:,:,0] = u_dot
-        diff_1[:,:,1] = difference
-        diff_2[:,:,1] = w_x
+        diff_1[:,:Nx/2] = u_dot
+        diff_1[:,Nx/2:] = difference
+        diff_2[:,Nx/2:] = w_x
 
         return diff_1, diff_2
 
@@ -227,18 +255,28 @@ class PPO:
             print("WARNING : Calling PPO::decay_action_std() on discrete action space policy")
         print("--------------------------------------------------------------------------------------------")
 
+    def select_action_optimal_control(self,state):
+        value_derivative = self.policy.evaluate_value_derivative(state).detach()
+
+        w = state[state.shape[0]/2:]
+        w_x = self.w_x(w.view(1,-1))
+        diff_2 = np.zeros_like(state)
+        diff_2[state.shape[0]/2:] = w_x[0,:]
+
+        action = torch.max(0,-torch.sum(value_derivative*diff_2)).detach()
+        action_logprob, state_val, _ = self.policy_old.evaluate(state,action)
+
+        return action, action_logprob, state_val
+
     def select_action(self, state):
 
         if self.has_continuous_action_space:
             with torch.no_grad():
                 state = torch.FloatTensor(state).to(device)
-                if torch.randint(2,()) == 0:
+                if torch.rand(()) > self.prob_optimal_control:
                     action, action_logprob, state_val = self.policy_old.act(state)
                 else:
-                    value_derivative = self.policy.evaluate_value_derivative(state)
-                    _, diff_2 = self.state_derivatives(state)
-                    action = torch.max(0,-torch.sum(value_derivative*diff_2, 1), (1,2)).detach()
-                    action_logprob, state_val, _ = self.policy_old.evaluate(state,action)
+                    action, action_logprob, state_val = self.select_action_optimal_control(state)
 
             self.buffer.states.append(state)
             self.buffer.actions.append(action)
@@ -302,8 +340,8 @@ class PPO:
             diff_1, diff_2 = self.state_derivatives(old_states)
             hjb_loss = (state_values*np.log(self.gamma)/self.dt 
                         + rewards 
-                        + torch.sum(value_derivative*diff_1, (1,2)) 
-                        + torch.max(0,-torch.sum(value_derivative*diff_2, 1), (1,2)))**2
+                        + torch.sum(value_derivative*diff_1, 1) 
+                        + torch.max(0,-torch.sum(value_derivative*diff_2, 1), 1))**2
             
             # final loss of clipped objective PPO
             loss = -torch.min(surr1, surr2) + 0.5 * hjb_loss - 0.01 * dist_entropy

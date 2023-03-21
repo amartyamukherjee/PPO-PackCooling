@@ -1,13 +1,17 @@
 import numpy as np
 import gym
 from gym import spaces
-from matplotlib import pyplot as plt
+
+from environments.PackCoolingGraph import PackCoolingGraph
+
+LOOKBACK_WINDOW_SIZE = 0
 
 class PackCooling(gym.Env):
     """Custom Environment that follows gym interface"""
-    metadata = {'render.modes': ['human']}
+    metadata = {'render.modes': ['live', 'file', 'none']}
+    visualization = None
 
-    def __init__(self, Nx=101, dt=0.01):
+    def __init__(self, linear=False, Nx=101, dt=0.01, N_iter=10):
         super(PackCooling, self).__init__()
 
         self.x = np.linspace(0.0,1.0,Nx)
@@ -18,7 +22,15 @@ class PackCooling(gym.Env):
         # Define the parameters of the model
         self.D = 0.02 # Thermal diffusion coefficient within the battery pack
         self.R = 0.01 # Thermal resistance between the battery pack and the cooling fluid
-        self.h = np.exp # Internal heat generation in the battery pack due to charging/discharge
+        self.N_iter = N_iter # Number of times to run the numerical solution in step()
+
+        if linear:
+            # h(u) = u
+            self.F = np.eye(Nx)
+            self.h = self.h_linear
+        else:
+            # h(u) = exp(0.1*u)
+            self.h = self.h_nonlinear
 
         # Initial condition to set for U. Set to cosine series to respect boundary conditions.
         self.num_fourier_coeffs = 5
@@ -28,13 +40,17 @@ class PackCooling(gym.Env):
             self.initial_condition_cosine[i,:] = np.cos(i*self.x)
 
         # Continuous actions between 0 and 1 to control the transport speed of the cooling fluid
-        self.action_space = spaces.Box(0.0,1.0)
+        self.action_space = spaces.Box(0.0, 1.0, dtype=np.float32)
 
-        # Observations aranged as [U, W, x_pos]
-        self.observation_space = spaces.Box(low=0, high=255, shape=
-                        (3, Nx, 1), dtype=np.uint8)
+        # Observations aranged as [U, W]
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=
+                        (2*Nx, 1), dtype=np.float32)
         
-        self.temperature_ax.fig.gca()
+    def h_nonlinear(self, u):
+        return np.exp(0.1*u)
+    
+    def h_linear(self,u):
+        return self.F @ u
 
     def step(self, action):
         # Execute one time step within the environment
@@ -46,10 +62,24 @@ class PackCooling(gym.Env):
         self.u = np.dot(np.random.uniform(0,1,(self.num_fourier_coeffs)),self.initial_condition_cosine)
 
         # Set w to a list of zeros
-        self.w = 0 * self.x
+        self.w = np.zeros_like(self.x)
 
-        self.x_pos = self.x
+        self.u_render = np.zeros((LOOKBACK_WINDOW_SIZE,self.x.shape[0]))
+        self.w_render = np.zeros((LOOKBACK_WINDOW_SIZE,self.x.shape[0]))
+        self.sigma_render = np.zeros((LOOKBACK_WINDOW_SIZE))
+
+        self.u_render[0,:] = self.u
+        self.w_render[0,:] = self.w
+
+        self.t = 0
         
-    def render(self, mode='human', close=False):
+    def render(self, mode='live', **kwargs):
         # Render the environment to the screen
-        self.temperature_ax
+        if mode == 'live':
+            if self.visualization == None:
+                self.visualization = PackCoolingGraph(
+                    kwargs.get('title', None))
+
+            if self.t >= LOOKBACK_WINDOW_SIZE:
+                self.visualization.render(
+                    self.u_render, self.w_render, self.sigma_render)
