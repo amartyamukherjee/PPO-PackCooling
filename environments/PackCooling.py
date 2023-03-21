@@ -20,8 +20,8 @@ class PackCooling(gym.Env):
         self.dt = self.dx if dt > self.dx else dt
 
         # Define the parameters of the model
-        self.D = 0.02 # Thermal diffusion coefficient within the battery pack
-        self.R = 100.0 # Thermal resistance between the battery pack and the cooling fluid
+        self.D = 0.2 # Thermal diffusion coefficient within the battery pack
+        self.R = 10.0 # Thermal resistance between the battery pack and the cooling fluid
         self.N_iter = N_iter # Number of times to run the numerical solution in step()
 
         if linear:

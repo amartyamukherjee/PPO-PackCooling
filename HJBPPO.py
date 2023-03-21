@@ -155,8 +155,8 @@ class PPO:
                  prob_optimal_control=0.5,
                  dx=0.01,
                  dt=0.1,
-                 R=100.0,
-                 D=0.02):
+                 R=10.0,
+                 D=0.2):
 
         self.has_continuous_action_space = has_continuous_action_space
 
