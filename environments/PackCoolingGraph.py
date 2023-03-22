@@ -31,7 +31,7 @@ class PackCoolingGraph:
         self.w_cb = None
 
         # Add padding to make graph easier to view
-        plt.subplots_adjust(left=0.1, bottom=0.1,
+        plt.subplots_adjust(left=0.2, bottom=0.1,
                             right=0.90, top=0.90, wspace=0.2, hspace=1.0)
 
         # Show the graph without blocking the rest of the program
