@@ -41,7 +41,7 @@ class PackCooling(gym.Env):
             self.h_prime = self.h_nonlinear_prime
 
         # Initial condition to set for U. Set to cosine series to respect boundary conditions.
-        self.num_fourier_coeffs = 100
+        self.num_fourier_coeffs = 10
 
         self.initial_condition_cosine = np.zeros((self.num_fourier_coeffs,Nx))
         for i in range(self.num_fourier_coeffs):
