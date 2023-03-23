@@ -5,6 +5,7 @@ from environments.PackCooling import PackCooling
 
 env = PackCooling()
 env.reset()
-for _ in range(20):
-    env.step(np.random.randint(2))
+for _ in range(2048):
+    env.step(np.random.randint(-1,2))
+    # env.step(-1)
 env.render()

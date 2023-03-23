@@ -5,14 +5,14 @@ from scipy import sparse
 
 from environments.PackCoolingGraph import PackCoolingGraph
 
-LOOKBACK_WINDOW_SIZE = 2047
+LOOKBACK_WINDOW_SIZE = 2048
 
 class PackCooling(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {'render.modes': ['live', 'file', 'none']}
     visualization = None
 
-    def __init__(self, linear=False, Nx=101, dt=0.01, N_iter=10):
+    def __init__(self, linear=False, Nx=101, dt=0.01, N_iter=1, sigma_0=-5.0):
         super(PackCooling, self).__init__()
 
         self.x = np.linspace(0.0,1.0,Nx)
@@ -23,15 +23,15 @@ class PackCooling(gym.Env):
 
         # Define the parameters of the model
         self.D = 0.01 # Thermal diffusion coefficient within the battery pack
-        self.R = 50.0 # Thermal resistance between the battery pack and the cooling fluid
+        self.R = 2.0 # Thermal resistance between the battery pack and the cooling fluid
         self.N_iter = N_iter # Number of times to run the numerical solution in step()
+        self.sigma_0 = sigma_0
 
         self.linear = linear
 
         if linear:
             # h(u) = u
-            self.F = np.zeros((2*Nx,2*Nx))
-            self.F[:Nx,:Nx] = np.eye(Nx)
+            self.F = np.eye(Nx)
             self.h = self.h_linear
             self.h_prime = self.h_linear_prime
         else:
@@ -57,20 +57,24 @@ class PackCooling(gym.Env):
                         (2*Nx, 1), dtype=np.float32)
         
     def h_nonlinear(self, state):
-        h_u = np.zeros((2*self.Nx))
+        h_u = np.zeros_like(state)
         h_u[:self.Nx] = np.exp(0.1*state[:self.Nx])
         return h_u
     
     def h_nonlinear_prime(self, state):
-        h_prime_u = np.zeros((2*self.Nx,2*self.Nx))
+        h_prime_u = np.zeros((state.shape[0],state.shape[0]))
         h_prime_u[:self.Nx,:self.Nx] = 0.1*np.diag(np.exp(0.1*state[:self.Nx]))
         return h_prime_u
     
-    def h_linear(self,u):
-        return self.F @ u
+    def h_linear(self,state):
+        h_u = np.zeros_like(state)
+        h_u[:self.Nx] = self.F @ state
+        return h_u
     
-    def h_linear_prime(self,u):
-        return self.F
+    def h_linear_prime(self,state):
+        h_prime_u = np.zeros((state.shape[0],state.shape[0]))
+        h_prime_u[:self.Nx,:self.Nx] = self.F
+        return h_prime_u
     
     def CN_matrix_init(self):
         u_identity_term = (1/self.dt)*sparse.eye(self.Nx).toarray()
@@ -99,38 +103,40 @@ class PackCooling(gym.Env):
         ).toarray()
 
         A_lhs = np.zeros((2*self.Nx,2*self.Nx))
-        A_rhs = np.zeros((2*self.Nx,2*self.Nx))
+        A_rhs = np.zeros((2*self.Nx,2*self.Nx+1))
 
         A_lhs[:self.Nx,:self.Nx] += u_identity_term
         A_rhs[:self.Nx,:self.Nx] += u_identity_term
         A_lhs[:self.Nx,:self.Nx] -= diffusion_term
         A_rhs[:self.Nx,:self.Nx] += diffusion_term
         A_lhs[:self.Nx,:] -= u_reaction_term
-        A_rhs[:self.Nx,:] += u_reaction_term
+        A_rhs[:self.Nx,:-1] += u_reaction_term
 
         A_lhs[self.Nx:,self.Nx:] += w_identity_term
-        A_lhs[self.Nx:,:] += w_reaction_term_lhs
+        A_lhs[self.Nx:,:] -= w_reaction_term_lhs
         self.A_lhs = A_lhs
         self.A_rhs = A_rhs
 
     def CN_matrix(self,sigma):
-        l = 1 - (sigma*self.dt)/self.dx
+        l = (sigma*self.dt)/self.dx
 
         w_reaction_term_rhs = sparse.diags(
-            [1-l,l,1-l,l],
+            [l,1-l,-l,-1+l],
             [-1,0,self.Nx-1,self.Nx],
-            shape=(self.Nx,2*self.Nx)
+            shape=(self.Nx,2*self.Nx+1)
         ).toarray()
-        w_reaction_term_rhs[0,1] += 1-l
+        w_reaction_term_rhs[0,1] += l
         w_reaction_term_rhs[0,self.Nx-1] = 0
+        w_reaction_term_rhs[0,-1] = l
         w_reaction_term_rhs = w_reaction_term_rhs/(2*self.R)
 
-        w_identity_term_rhs = (1/self.dt)*sparse.diags(
-            [1-l,l],
-            [0,self.Nx],
-            shape=(self.Nx,self.Nx)
+        w_identity_term_rhs = sparse.diags(
+            [l,1-l],
+            [-1,0],
+            shape=(self.Nx,self.Nx+1)
         ).toarray()
-        w_identity_term_rhs[0,self.Nx-1] = 0
+        w_identity_term_rhs[0,-1] = l
+        w_identity_term_rhs = w_identity_term_rhs/self.dt
 
         A_lhs = self.A_lhs.copy()
         A_rhs = self.A_rhs.copy()
@@ -141,7 +147,8 @@ class PackCooling(gym.Env):
         return A_lhs, A_rhs
     
     def newtonRaphsonMethod(self,state,A_lhs,A_rhs,N):
-        rhs = ((A_rhs @ state.reshape([-1,1])).reshape(-1) + 0.5*self.h(state)).copy()
+        rhs = ((A_rhs @ state.reshape([-1,1])).reshape(-1) + 0.5*self.h(state[:-1])).copy()
+        state = state[:-1]
         for _ in range(N):
             state -= np.linalg.solve((A_lhs - 0.5*self.h_prime(state)),
                                      (A_lhs @ state.reshape([-1,1])).reshape(-1) - 0.5*self.h(state) - rhs)
@@ -149,8 +156,10 @@ class PackCooling(gym.Env):
 
     def step(self, action):
         # Execute N_iter time steps within the environment
+        action = (action + 1) / 2
+        state = np.concatenate((self.u,self.w))
         for _ in range(self.N_iter):
-            state = np.concatenate((self.u,self.w))
+            state = np.concatenate((state,[self.sigma_0]))
 
             A_lhs, A_rhs = self.CN_matrix(action)
 
@@ -159,9 +168,9 @@ class PackCooling(gym.Env):
             else:
                 state = self.newtonRaphsonMethod(state,A_lhs,A_rhs,10)
             
-            self.u = state[:self.Nx]
-            self.w = state[self.Nx:]
-            reward = -np.dot(self.u,self.u)
+        self.u = state[:self.Nx]
+        self.w = state[self.Nx:]
+        reward = -np.dot(self.u,self.u)
 
         self.sigma_render[self.timestep] = action
 
@@ -170,16 +179,16 @@ class PackCooling(gym.Env):
         self.u_render[self.timestep,:] = self.u
         self.w_render[self.timestep,:] = self.w
 
-        return state, reward, (self.timestep == LOOKBACK_WINDOW_SIZE), None
+        return state, reward, (self.timestep == LOOKBACK_WINDOW_SIZE or reward < -1e7), None
 
     def reset(self):
         # Reset the state of the environment to an initial state
 
         # Set u to a random cosine series
-        self.u = np.dot(np.random.uniform(-1,1,(self.num_fourier_coeffs)),self.initial_condition_cosine)
+        self.u = np.dot(np.random.uniform(-2,2,(self.num_fourier_coeffs)),self.initial_condition_cosine)
 
         # Set w to a list of zeros
-        self.w = np.zeros(self.Nx)
+        self.w = self.sigma_0 * np.ones(self.Nx)
 
         self.u_render = np.zeros((LOOKBACK_WINDOW_SIZE+1,self.x.shape[0]))
         self.w_render = np.zeros((LOOKBACK_WINDOW_SIZE+1,self.x.shape[0]))
@@ -200,4 +209,5 @@ class PackCooling(gym.Env):
             self.visualization.render(
                 self.u_render[:self.timestep,:],
                 self.w_render[:self.timestep,:],
-                self.sigma_render[:self.timestep])
+                self.sigma_render[:self.timestep],
+                self.dt*self.N_iter)

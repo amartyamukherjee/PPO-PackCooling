@@ -37,57 +37,57 @@ class PackCoolingGraph:
         # Show the graph without blocking the rest of the program
         plt.show(block=False)
 
-    def _render_u(self, u):
+    def _render_u(self, u, timestep):
         # Clear the frame rendered last step
         self.u_ax.clear()
         if self.u_cb:
             self.u_cb.remove()
 
         x = np.linspace(0,1,u.shape[1])
-        y = np.linspace(0,0.1*(u.shape[0]-1),u.shape[0])
+        y = np.linspace(0,timestep*(u.shape[0]-1),u.shape[0])
         X,Y = np.meshgrid(x,y)
 
         # Plot u
-        im = self.u_ax.pcolormesh(X,Y,u)
+        im = self.u_ax.pcolormesh(Y,X,u)
         self.u_ax.set_title("u(x,t)")
-        self.u_ax.set_xlabel("x")
-        self.u_ax.set_ylabel("t")
+        self.u_ax.set_xlabel("t")
+        self.u_ax.set_ylabel("x")
         self.u_cb = self.fig.colorbar(im,ax=self.u_ax)
-        self.u_ax.set_xbound(0.0,1.0)
+        # self.u_ax.set_xbound(0.0,1.0)
 
-    def _render_w(self, w):
+    def _render_w(self, w, timestep):
         # Clear the frame rendered last step
         self.w_ax.clear()
         if self.w_cb:
             self.w_cb.remove()
 
         x = np.linspace(0,1,w.shape[1])
-        y = np.linspace(0,0.1*(w.shape[0]-1),w.shape[0])
+        y = np.linspace(0,timestep*(w.shape[0]-1),w.shape[0])
         X,Y = np.meshgrid(x,y)
 
         # Plot w
-        im = self.w_ax.pcolormesh(X,Y,w)
+        im = self.w_ax.pcolormesh(Y,X,w)
         self.w_ax.set_title("w(x,t)")
-        self.w_ax.set_xlabel("x")
-        self.w_ax.set_ylabel("t")
+        self.w_ax.set_xlabel("t")
+        self.w_ax.set_ylabel("x")
         self.w_cb = self.fig.colorbar(im,ax=self.w_ax)
-        self.w_ax.set_xbound(0.0,1.0)
+        # self.w_ax.set_xbound(0.0,1.0)
 
-    def _render_sigma(self, sigma):
+    def _render_sigma(self, sigma, timestep):
         # Clear the frame rendered last step
         self.action_ax.clear()
 
-        t = np.linspace(0,0.1*(sigma.shape[0]-1),sigma.shape[0])
+        t = np.linspace(0,timestep*(sigma.shape[0]-1),sigma.shape[0])
 
         # Plot sigma
         self.action_ax.plot(t,sigma)
         self.action_ax.set_title("$\sigma(t)$")
         self.action_ax.set_xlabel("t")
 
-    def render(self, u, w, actions):
-        self._render_u(u)
-        self._render_w(w)
-        self._render_sigma(actions)
+    def render(self, u, w, actions, timestep):
+        self._render_u(u,timestep)
+        self._render_w(w,timestep)
+        self._render_sigma(actions,timestep)
 
         plt.savefig("Graph_"+str(self.render_count)+".png")
         self.render_count += 1
