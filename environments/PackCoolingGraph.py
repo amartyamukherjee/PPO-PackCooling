@@ -20,13 +20,13 @@ class PackCoolingGraph:
 
         # Create middle subplot for u meshplot
         self.u_ax = plt.subplot2grid(
-            (6, 1), (2, 0), rowspan=2, colspan=1, sharex=self.action_ax, title="u(x,t)", xlabel="x", ylabel="t")
+            (6, 1), (2, 0), rowspan=2, colspan=1, sharex=self.action_ax, title="u(x,t)", xlabel="t", ylabel="x")
         
         self.u_cb = None
 
         # Create bottom subplot for w meshplot
         self.w_ax = plt.subplot2grid(
-            (6, 1), (4, 0), rowspan=2, colspan=1, sharex=self.action_ax, title="w(x,t)", xlabel="x", ylabel="t")
+            (6, 1), (4, 0), rowspan=2, colspan=1, sharex=self.action_ax, title="w(x,t)", xlabel="t", ylabel="x")
         
         self.w_cb = None
 
@@ -53,7 +53,6 @@ class PackCoolingGraph:
         self.u_ax.set_xlabel("t")
         self.u_ax.set_ylabel("x")
         self.u_cb = self.fig.colorbar(im,ax=self.u_ax)
-        # self.u_ax.set_xbound(0.0,1.0)
 
     def _render_w(self, w, timestep):
         # Clear the frame rendered last step
@@ -71,7 +70,6 @@ class PackCoolingGraph:
         self.w_ax.set_xlabel("t")
         self.w_ax.set_ylabel("x")
         self.w_cb = self.fig.colorbar(im,ax=self.w_ax)
-        # self.w_ax.set_xbound(0.0,1.0)
 
     def _render_sigma(self, sigma, timestep):
         # Clear the frame rendered last step

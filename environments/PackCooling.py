@@ -31,7 +31,7 @@ class PackCooling(gym.Env):
 
         if linear:
             # h(u) = u
-            self.F = np.eye(Nx)
+            self.F = 0.1*np.eye(Nx)
             self.h = self.h_linear
             self.h_prime = self.h_linear_prime
         else:
@@ -72,7 +72,10 @@ class PackCooling(gym.Env):
         return h_u
     
     def h_linear_prime(self,state):
-        h_prime_u = np.zeros((state.shape[0],state.shape[0]))
+        if state.ndim == 1:
+            h_prime_u = np.zeros((state.shape[0],state.shape[0]))
+        else:
+            h_prime_u = np.zeros((state.shape[0],state.shape[1]))
         h_prime_u[:self.Nx,:self.Nx] = self.F
         return h_prime_u
     
@@ -164,7 +167,7 @@ class PackCooling(gym.Env):
             A_lhs, A_rhs = self.CN_matrix(action)
 
             if self.linear:
-                state = np.linalg.lstsq(A_lhs - 0.5*self.F, (A_rhs + 0.5*self.F) @ state.reshape([-1,1]), rcond=1)[0].reshape(-1)
+                state = np.linalg.lstsq(A_lhs - 0.5*self.h_prime(A_lhs), (A_rhs + 0.5*self.h_prime(A_rhs)) @ state.reshape([-1,1]), rcond=1)[0].reshape(-1)
             else:
                 state = self.newtonRaphsonMethod(state,A_lhs,A_rhs,10)
             
@@ -179,7 +182,9 @@ class PackCooling(gym.Env):
         self.u_render[self.timestep,:] = self.u
         self.w_render[self.timestep,:] = self.w
 
-        return state, reward, (self.timestep == LOOKBACK_WINDOW_SIZE or reward < -1e7), None
+        done = (self.timestep == LOOKBACK_WINDOW_SIZE or reward < -1e7)
+
+        return state, reward, done, False, None
 
     def reset(self):
         # Reset the state of the environment to an initial state
@@ -198,6 +203,8 @@ class PackCooling(gym.Env):
         self.w_render[0,:] = self.w
 
         self.timestep = 0
+
+        return np.concatenate((self.u,self.w)), None
         
     def render(self, mode='live', **kwargs):
         # Render the environment to the screen
