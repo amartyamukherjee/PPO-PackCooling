@@ -67,11 +67,11 @@ class ActorCritic(nn.Module):
                         )
         # critic
         self.critic = nn.Sequential(
-                        nn.Linear(state_dim, 64, bias=False),
+                        nn.Linear(state_dim, 64),
                         nn.Tanh(),
-                        nn.Linear(64, 64, bias=False),
+                        nn.Linear(64, 64),
                         nn.Tanh(),
-                        nn.Linear(64, 1, bias=False)
+                        nn.Linear(64, 1)
                     )
         
     def set_action_std(self, new_action_std):
@@ -96,6 +96,7 @@ class ActorCritic(nn.Module):
             dist = Categorical(action_probs)
 
         action = dist.sample()
+        action = torch.clamp(action,-1.0,1.0)
         action_logprob = dist.log_prob(action)
         state_val = self.critic(state)
 
@@ -172,6 +173,9 @@ class PPO:
         self.dt = dt
         self.R = R
         self.D = D
+        
+        self.init_cond = torch.zeros((state_dim))
+        self.init_cond[state_dim//2:] = -R
         
         self.buffer = RolloutBuffer()
 
@@ -343,7 +347,7 @@ class PPO:
                         + torch.nn.functional.relu(-torch.sum(value_derivative*diff_2, 1)))**2
             
             # final loss of clipped objective PPO
-            loss = -torch.min(surr1, surr2) + 0.5 * hjb_loss - 0.01 * dist_entropy
+            loss = -torch.min(surr1, surr2) + 0.5 * hjb_loss + 0.5 * (self.policy.critic(self.init_cond))**2 - 0.01 * dist_entropy
             
             # take gradient step
             self.optimizer.zero_grad()
