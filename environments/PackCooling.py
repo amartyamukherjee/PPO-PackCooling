@@ -153,9 +153,14 @@ class PackCooling(gym.Env):
         rhs = ((A_rhs @ state.reshape([-1,1])).reshape(-1) + 0.5*self.h(state[:-1])).copy()
         state = state[:-1]
         for _ in range(N):
-            state -= np.linalg.lstsq((A_lhs - 0.5*self.h_prime(state)),
-                                     (A_lhs @ state.reshape([-1,1])).reshape(-1) - 0.5*self.h(state) - rhs,
-                                     rcond=1)[0]
+            state_grad = np.linalg.solve((A_lhs - 0.5*self.h_prime(state)),
+                                         (A_lhs @ state.reshape([-1,1])).reshape(-1) - 0.5*self.h(state) - rhs)
+            if np.isnan(state_grad).any():
+                state -= np.linalg.lstsq((A_lhs - 0.5*self.h_prime(state)),
+                                        (A_lhs @ state.reshape([-1,1])).reshape(-1) - 0.5*self.h(state) - rhs,
+                                        rcond=1)[0]
+            else:
+                state -= state_grad
         return state
 
     def step(self, action):
@@ -168,9 +173,14 @@ class PackCooling(gym.Env):
             A_lhs, A_rhs = self.CN_matrix(action)
 
             if self.linear:
-                state = np.linalg.lstsq(A_lhs - 0.5*self.h_prime(A_lhs),
-                                        (A_rhs + 0.5*self.h_prime(A_rhs)) @ state.reshape([-1,1]),
-                                        rcond=1)[0].reshape(-1)
+                new_state = np.linalg.lstsq(A_lhs - 0.5*self.h_prime(A_lhs),
+                                            (A_rhs + 0.5*self.h_prime(A_rhs)) @ state.reshape([-1,1])).reshape(-1)
+                if np.isnan(new_state).any():
+                    state = np.linalg.lstsq(A_lhs - 0.5*self.h_prime(A_lhs),
+                                            (A_rhs + 0.5*self.h_prime(A_rhs)) @ state.reshape([-1,1]),
+                                            rcond=1)[0].reshape(-1)
+                else:
+                    state = new_state
             else:
                 state = self.newtonRaphsonMethod(state,A_lhs,A_rhs,10)
             
