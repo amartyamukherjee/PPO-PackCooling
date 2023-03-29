@@ -153,8 +153,9 @@ class PackCooling(gym.Env):
         rhs = ((A_rhs @ state.reshape([-1,1])).reshape(-1) + 0.5*self.h(state[:-1])).copy()
         state = state[:-1]
         for _ in range(N):
-            state -= np.linalg.solve((A_lhs - 0.5*self.h_prime(state)),
-                                     (A_lhs @ state.reshape([-1,1])).reshape(-1) - 0.5*self.h(state) - rhs)
+            state -= np.linalg.lstsq((A_lhs - 0.5*self.h_prime(state)),
+                                     (A_lhs @ state.reshape([-1,1])).reshape(-1) - 0.5*self.h(state) - rhs,
+                                     rcond=1)[0]
         return state
 
     def step(self, action):
@@ -167,7 +168,9 @@ class PackCooling(gym.Env):
             A_lhs, A_rhs = self.CN_matrix(action)
 
             if self.linear:
-                state = np.linalg.lstsq(A_lhs - 0.5*self.h_prime(A_lhs), (A_rhs + 0.5*self.h_prime(A_rhs)) @ state.reshape([-1,1]), rcond=1)[0].reshape(-1)
+                state = np.linalg.lstsq(A_lhs - 0.5*self.h_prime(A_lhs),
+                                        (A_rhs + 0.5*self.h_prime(A_rhs)) @ state.reshape([-1,1]),
+                                        rcond=1)[0].reshape(-1)
             else:
                 state = self.newtonRaphsonMethod(state,A_lhs,A_rhs,10)
             
@@ -205,6 +208,9 @@ class PackCooling(gym.Env):
         self.timestep = 0
 
         return np.concatenate((self.u,self.w)), None
+    
+    def seed(self,seed):
+        np.random.seed(seed)
         
     def render(self, mode='live', **kwargs):
         # Render the environment to the screen
