@@ -341,13 +341,20 @@ class PPO:
             # Finding HJB Loss
             value_derivative = self.policy.evaluate_value_derivative(old_states)
             diff_1, diff_2 = self.state_derivatives(old_states)
-            hjb_loss = (state_values*np.log(self.gamma)/self.dt 
+            hjb_loss = ((1-self.gamma)*state_values
                         + rewards 
-                        + torch.sum(value_derivative*diff_1, 1) 
-                        + torch.nn.functional.relu(-torch.sum(value_derivative*diff_2, 1)))**2
+                        + torch.sum(value_derivative*diff_1, 1)*self.dt
+                        + torch.nn.functional.relu(-torch.sum(value_derivative*diff_2, 1))*self.dt)**2
             
+            # Dirichlet boundary
+            dirichlet_loss = (self.policy.critic(self.init_cond))**2
+
+            # Neumann boundary
+            init_derivative = self.policy.evaluate_value_derivative(self.init_cond)
+            neumann_loss = torch.nn.functional.mse_loss(init_derivative, torch.zeros_like(init_derivative))
+
             # final loss of clipped objective PPO
-            loss = -torch.min(surr1, surr2) + 0.5 * hjb_loss + 0.5 * (self.policy.critic(self.init_cond))**2 - 0.01 * dist_entropy
+            loss = -torch.min(surr1, surr2) + 0.5 * hjb_loss + 0.5 * dirichlet_loss + 0.5 * neumann_loss - 0.01 * dist_entropy
             
             # take gradient step
             self.optimizer.zero_grad()

@@ -45,7 +45,7 @@ class PackCooling(gym.Env):
 
         self.initial_condition_cosine = np.zeros((self.num_fourier_coeffs,Nx))
         for i in range(self.num_fourier_coeffs):
-            self.initial_condition_cosine[i,:] = np.cos(2*np.pi*i*self.x)
+            self.initial_condition_cosine[i,:] = np.cos(np.pi*i*self.x)
         
         self.CN_matrix_init()
 
@@ -159,6 +159,10 @@ class PackCooling(gym.Env):
                 state -= np.linalg.lstsq((A_lhs - 0.5*self.h_prime(state)),
                                         (A_lhs @ state.reshape([-1,1])).reshape(-1) - 0.5*self.h(state) - rhs,
                                         rcond=1)[0]
+            elif (np.abs(state_grad) > 1e6).any():
+                state -= np.linalg.lstsq((A_lhs - 0.5*self.h_prime(state)),
+                                        (A_lhs @ state.reshape([-1,1])).reshape(-1) - 0.5*self.h(state) - rhs,
+                                        rcond=1)[0]
             else:
                 state -= state_grad
         return state
@@ -173,7 +177,7 @@ class PackCooling(gym.Env):
             A_lhs, A_rhs = self.CN_matrix(action)
 
             if self.linear:
-                new_state = np.linalg.lstsq(A_lhs - 0.5*self.h_prime(A_lhs),
+                new_state = np.linalg.solve(A_lhs - 0.5*self.h_prime(A_lhs),
                                             (A_rhs + 0.5*self.h_prime(A_rhs)) @ state.reshape([-1,1])).reshape(-1)
                 if np.isnan(new_state).any():
                     state = np.linalg.lstsq(A_lhs - 0.5*self.h_prime(A_lhs),

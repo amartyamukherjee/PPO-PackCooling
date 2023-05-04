@@ -35,7 +35,7 @@ class PackCoolingGraph:
                             right=0.90, top=0.90, wspace=0.2, hspace=1.0)
 
         # Show the graph without blocking the rest of the program
-        plt.show(block=False)
+        # plt.show(block=False)
 
     def _render_u(self, u, timestep):
         # Clear the frame rendered last step
@@ -91,7 +91,7 @@ class PackCoolingGraph:
         self.render_count += 1
         
         # Necessary to view frames before they are unrendered
-        plt.pause(0.001)
+        # plt.pause(0.001)
 
     def close(self):
         plt.close()
