@@ -143,7 +143,7 @@ class ActorCritic(nn.Module):
         return value_derivative
 
 
-class PPO:
+class HJBPPO:
     def __init__(self,
                  state_dim,
                  action_dim,
