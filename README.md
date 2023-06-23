@@ -10,9 +10,8 @@ Implementation of the PackCooling environment is in environments/PackCooling.py
 
 Implementation of the rendering feature in the PackCooling environment is in environments/PackCoolingGraph.py
 
-To train HJBPPO on the environment, set the prob_optimal_control parameter to 0.5
-To train HJB value iteration on the environment, set the prob_optimal_control paper to 1.0
-To train PPO on the environment, set the prob_optimal_control paper to 0.0
+To train HJBPPO on the environment, set the prob_optimal_control parameter in HJBPPO.HJBPPO to 0.5
+To train HJB value iteration on the environment, set the prob_optimal_control paper in HJBPPO.HJBPPO to 1.0
 
 ## References
 
