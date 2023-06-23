@@ -2,6 +2,8 @@
 
 Forked from PPO-PyTorch by Nihkil Baharte
 
+[](/HJBPPO_figs/HJBPPO_Graph_0.png)
+
 Source code for the paper "Actor-Critic Methods using Physics-Informed Neural Networks: Control of a 1D PDE Model for Fluid-Cooled Battery Packs" by Amartya Mukherjee and Jun Liu, 2023
 
 Implementation of HJBPPO on HJBPPO.py
